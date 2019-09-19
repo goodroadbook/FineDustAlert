@@ -5,7 +5,7 @@
         <value>http://openapi.airkorea.or.kr/openapi/services/rest/ArpltnInforInqireSvc/getCtprvnMesureSidoLIst</value>
     </entry>
     <entry>
-        <key>AirKoreaAuthKey</key>
+        <key>AirKoreaAuthKey </key>
         <value>Auth Key</value>
     </entry>
 </defaultsMap>

@@ -149,8 +149,8 @@ public class LoacationHandler implements LocationListener
         try
         {
             addresses = geocoder.getFromLocation(
-                    37.543158/*mLatitude*/,
-                    126.992942/*mLongitude*/,
+                    mLatitude,
+                    mLongitude,
                     7);
         }
         catch (Exception e)

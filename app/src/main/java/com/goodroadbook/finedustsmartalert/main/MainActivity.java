@@ -63,19 +63,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             analyticsHelper.setUserProperty(DefineValue.FA_USER_PROPERTY_PERMISSION,
                     DefineValue.FA_USER_PROPERTY_PERMISSION_OK);
 
-            ImageView mapbtn = (ImageView) findViewById(R.id.mapicon);
-            mapbtn.setOnClickListener(this);
-
-            ImageView infobtn = (ImageView) findViewById(R.id.infoicon);
-            infobtn.setOnClickListener(this);
-
-            // 현재 주소를조회한다.
-            setCuurentLocationData();
-
-            // 조회된 주소의 미세먼지 데이터를 조회한다.
-            getAirKoreaData();
-
-            updateMainView();
+            init();
         }
     }
 
@@ -96,6 +84,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 }
                 else
                 {
+                    init();
                     InitStepHandler.nextInitState(this, DefineValue.INIT_STATE_FINISH);
                 }
                 break;
@@ -133,6 +122,23 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     @Override
     public void onAriKoreaComplete(int result)
     {
+        updateMainView();
+    }
+
+    private void init()
+    {
+        ImageView mapbtn = (ImageView) findViewById(R.id.mapicon);
+        mapbtn.setOnClickListener(this);
+
+        ImageView infobtn = (ImageView) findViewById(R.id.infoicon);
+        infobtn.setOnClickListener(this);
+
+        // 현재 주소를조회한다.
+        setCuurentLocationData();
+
+        // 조회된 주소의 미세먼지 데이터를 조회한다.
+        getAirKoreaData();
+
         updateMainView();
     }
 

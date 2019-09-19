@@ -1,4 +1,4 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
+<resources>
 
     <!-- Base application theme. -->
     <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
@@ -8,24 +8,4 @@
         <item name="colorAccent">@color/colorAccent</item>
     </style>
 
-    <!-- AhnLab PriMa theme -->
-    <style name="FineDustBaseTheme" parent="Theme.AppCompat.Light.NoActionBar">
-        <item name="colorPrimary">@color/Black</item>
-        <item name="colorPrimaryDark">@color/Black</item>
-        <item name="colorAccent">@color/Black</item>
-    </style>
-
-    <style name="MainThemeSplash" parent="Theme.AppCompat.DayNight.NoActionBar">
-        <item name="colorPrimary">@color/Blue</item>
-        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
-        <item name="colorControlNormal">@color/Blue</item>
-        <item name="android:windowBackground">@drawable/start_splash</item>
-    </style>
-
-    <!-- main activity -->
-    <style name="MainActivityTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
-        <item name="colorPrimary">@color/Black</item>
-        <item name="colorPrimaryDark">@color/Black</item>
-        <item name="colorControlNormal">@color/Black</item>
-    </style>
 </resources>

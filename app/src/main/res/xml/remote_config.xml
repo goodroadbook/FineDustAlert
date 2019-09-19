@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<defaultsMap>
+    <entry>
+        <key>SidoListServerURL</key>
+        <value>http://openapi.airkorea.or.kr/openapi/services/rest/ArpltnInforInqireSvc/getCtprvnMesureSidoLIst</value>
+    </entry>
+    <entry>
+        <key>AirKoreaAuthKey</key>
+        <value>Auth Key</value>
+    </entry>
+</defaultsMap>

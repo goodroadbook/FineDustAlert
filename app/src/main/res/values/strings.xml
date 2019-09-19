@@ -1,3 +1,13 @@
 <resources>
-    <string name="app_name">Fine Dust</string>
+    <string name="app_name">미세 알림</string>
+    <string name="app_description1">한눈에 미세 먼지와 날씨 상태를 볼 수 있어요!</string>
+    <string name="app_description2">지금 이 순간의 대한민국의 미세먼지 상태를 알려드립니다.</string>
+    <string name="button_start">시작하기</string>
+    <string name="finedust_good">좋은 공기</string>
+    <string name="finedust_moderate">보통 공기</string>
+    <string name="finedust_unhealthy">나쁜 공기</string>
+    <string name="finedust_very_unhealthy">매우 나쁜 공기</string>
+    <string name="main_bottom_left_txt">미세먼지</string>
+    <string name="main_bottom_right_txt">초미세먼지</string>
+    <string name="main_bottom_finedust_unit">ug/m</string>
 </resources>

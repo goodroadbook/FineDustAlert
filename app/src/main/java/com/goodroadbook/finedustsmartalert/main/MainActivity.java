@@ -1,73 +1,82 @@
 package com.goodroadbook.finedustsmartalert.main;
 
-import android.Manifest;
-import android.content.DialogInterface;
+import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.location.Address;
-import android.location.Geocoder;
-import android.location.LocationManager;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
-import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.TextView;
-import android.widget.Toast;
 
-import androidx.annotation.NonNull;
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
 
 import com.goodroadbook.finedustsmartalert.R;
-import com.goodroadbook.finedustsmartalert.apiserver.GetDataAsynTask;
+import com.goodroadbook.finedustsmartalert.server.airkorea.AirKoreaHelper;
+import com.goodroadbook.finedustsmartalert.server.airkorea.AirSidoDataAsynTask;
+import com.goodroadbook.finedustsmartalert.common.ActivityHandler;
+import com.goodroadbook.finedustsmartalert.common.DefineValue;
+import com.goodroadbook.finedustsmartalert.common.PreferenceManager;
+import com.goodroadbook.finedustsmartalert.init.InitStepHandler;
+import com.goodroadbook.finedustsmartalert.init.PermissionActivity;
+import com.goodroadbook.finedustsmartalert.location.AddressTranslation;
+import com.goodroadbook.finedustsmartalert.location.LoacationHandler;
+import com.goodroadbook.finedustsmartalert.server.airkorea.OnAriKoreaCompleteListener;
+import com.goodroadbook.finedustsmartalert.server.analytics.AnalyticsHelper;
+import com.goodroadbook.finedustsmartalert.server.firestore.FireStoreHelper;
+import com.goodroadbook.finedustsmartalert.server.firestore.OnFireStoreCompleteListener;
+import com.goodroadbook.finedustsmartalert.server.remoteconfig.RemoteConfigHelper;
 
-import java.util.List;
-import java.util.Locale;
+import java.net.URLEncoder;
+import java.text.SimpleDateFormat;
 
-public class MainActivity extends AppCompatActivity implements View.OnClickListener
+public class MainActivity extends AppCompatActivity implements View.OnClickListener, OnAriKoreaCompleteListener
 {
-    private LocationService locationService;
-
-    private static final int REQ_LOCATION = 1001;
-    private static final int REQ_LOCATION_PERMISSIONS = 100;
-
-    private String[] REQUIRED_PERMISSIONS  =
-    {
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-    };
-
     @Override
     protected void onCreate(Bundle savedInstanceState)
     {
+        setTheme(R.style.MainActivityTheme);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        Button showlocButton = (Button) findViewById(R.id.button);
-        showlocButton.setOnClickListener(this);
+        //Remote Config 정보를 가져온다.
+        RemoteConfigHelper remoteConfigHelper = new RemoteConfigHelper(this);
+        remoteConfigHelper.init();
+        remoteConfigHelper.remoteConfigfetch();
 
-        // 기기의 위치 서비스가 켜져 있는지 확인
-        if (!checkLocationServicesStatus())
+        ActivityHandler.OpenActivity(this, InitStepHandler.getCurrentInitState(this));
+        if(InitStepHandler.getCurrentInitState(this) == DefineValue.INIT_STATE_FINISH)
         {
-            showDialogForLocationServiceSetting();
-            finish();
-            return;
+            //Analytics 수집
+            AnalyticsHelper analyticsHelper = new AnalyticsHelper();
+            analyticsHelper.initFirebaseAnalytics(this);
+
+            if(!PermissionActivity.isLocationServicesStatus(this) ||
+                    !PermissionActivity.isLocationPermissins(this))
+            {
+                ActivityHandler.OpenActivity(this, DefineValue.INIT_STATE_PERMISSION);
+                analyticsHelper.setUserProperty(DefineValue.FA_USER_PROPERTY_PERMISSION,
+                        DefineValue.FA_USER_PROPERTY_PERMISSION_NO);
+                return;
+            }
+            analyticsHelper.setUserProperty(DefineValue.FA_USER_PROPERTY_PERMISSION,
+                    DefineValue.FA_USER_PROPERTY_PERMISSION_OK);
+
+            ImageView mapbtn = (ImageView) findViewById(R.id.mapicon);
+            mapbtn.setOnClickListener(this);
+
+            ImageView infobtn = (ImageView) findViewById(R.id.infoicon);
+            infobtn.setOnClickListener(this);
+
+            // 현재 주소를조회한다.
+            setCuurentLocationData();
+
+            // 조회된 주소의 미세먼지 데이터를 조회한다.
+            getAirKoreaData();
+
+            updateMainView();
         }
-
-        // 위치 권한 획득 유무를 확인한다.
-        if(!isLocationPermissins())
-        {
-            checkRunTimePermission();
-            finish();
-            return;
-        }
-
-        // 현재 주소를조회한다.
-
-        // 조회된 주소의 미세먼지 데이터를 조회한다.
-        GetDataAsynTask getDataAsynTask = new GetDataAsynTask();
-        getDataAsynTask.execute();
     }
 
     @Override
@@ -77,15 +86,20 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
         switch (requestCode)
         {
-            case REQ_LOCATION:
-                if (checkLocationServicesStatus())
+            case DefineValue.REQ_GUIDE:
+                InitStepHandler.nextInitState(this, DefineValue.INIT_STATE_PERMISSION);
+                break;
+            case DefineValue.REQ_PERMISSION:
+                if(resultCode == Activity.RESULT_CANCELED)
                 {
-                    if (checkLocationServicesStatus())
-                    {
-                        checkRunTimePermission();
-                        return;
-                    }
+                    finish();
                 }
+                else
+                {
+                    InitStepHandler.nextInitState(this, DefineValue.INIT_STATE_FINISH);
+                }
+                break;
+            default:
                 break;
         }
     }
@@ -95,163 +109,121 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     {
         switch (view.getId())
         {
-            case R.id.button:
-                locationService = new LocationService(MainActivity.this);
-                locationService.getLocation();
-                double latitude = locationService.getLatitude();
-                double longitude = locationService.getLongitude();
-                String address = getCurrentAddress(latitude, longitude);
+            case R.id.mapicon:
+                // 현재 주소를조회한다.
+                setCuurentLocationData();
 
-                TextView textview_address = (TextView)findViewById(R.id.textview);
-                textview_address.setText(address);
-                Toast.makeText(MainActivity.this, "현재위치 \n위도 " + latitude + "\n경도 " + longitude, Toast.LENGTH_LONG).show();
+                // 조회된 주소의 미세먼지 데이터를 조회한다.
+                getAirKoreaData();
+
+                updateMainView();
+
+                //Analytics 수집
+                AnalyticsHelper analyticsHelper = new AnalyticsHelper();
+                analyticsHelper.initFirebaseAnalytics(this);
+                analyticsHelper.sendLogEvent(DefineValue.FA_EVENT_MY_GPS, "test", "test");
+                break;
+            case R.id.infoicon:
+                break;
+            default:
                 break;
         }
     }
 
     @Override
-    public void onRequestPermissionsResult(int permsRequestCode, @NonNull String[] permissions, @NonNull int[] grandResults)
+    public void onAriKoreaComplete(int result)
     {
-        if ( permsRequestCode == REQ_LOCATION_PERMISSIONS &&
-                grandResults.length == REQUIRED_PERMISSIONS.length)
-        {
-            boolean permissionstate = true;
-            for (int result : grandResults)
-            {
-                if (result != PackageManager.PERMISSION_GRANTED)
-                {
-                    permissionstate = false;
-                    break;
-                }
-            }
-
-            if ( permissionstate )
-            {
-                ;
-            }
-            else
-            {
-                if (ActivityCompat.shouldShowRequestPermissionRationale(this, REQUIRED_PERMISSIONS[0])
-                        || ActivityCompat.shouldShowRequestPermissionRationale(this, REQUIRED_PERMISSIONS[1]))
-                {
-                    Toast.makeText(MainActivity.this,
-                            "퍼미션 허용되지 않았습니다. 앱을 다시 실행하여 퍼미션을 허용해주세요.",
-                            Toast.LENGTH_LONG).show();
-                    finish();
-                }
-                else
-                {
-                    Toast.makeText(MainActivity.this,
-                            "퍼미션이 허용되지 않았습니다. 설정(앱 정보)에서 퍼미션을 허용해야 합니다.",
-                            Toast.LENGTH_LONG).show();
-                }
-            }
-        }
+        updateMainView();
     }
 
-    private void showDialogForLocationServiceSetting()
+    private void setCuurentLocationData()
     {
-        AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
-        builder.setTitle("위치 서비스 비활성화");
-        builder.setMessage("앱을 사용하기 위해서는 위치 서비스가 필요합니다.\n"
-                + "위치 설정을 수정하실래요?");
-        builder.setCancelable(true);
-        builder.setPositiveButton("설정", new DialogInterface.OnClickListener()
-        {
-            @Override
-            public void onClick(DialogInterface dialog, int id)
-            {
-                Intent intent = new Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS);
-                startActivityForResult(intent, REQ_LOCATION);
-            }
-        });
-        builder.setNegativeButton("취소", new DialogInterface.OnClickListener()
-        {
-            @Override
-            public void onClick(DialogInterface dialog, int id)
-            {
-                dialog.cancel();
-            }
-        });
-        builder.create().show();
-    }
+        LoacationHandler loacationHandler = new LoacationHandler(this);
+        Address address = loacationHandler.getCurrentAddress();
+        String add[] = address.getAddressLine(0).split(" ");
+        String addressline = add[1] + " " + add[2];
+        Log.d("namjinha", "addressline = " + addressline);
 
-    private String getCurrentAddress( double latitude, double longitude)
-    {
-        Geocoder geocoder = new Geocoder(this, Locale.getDefault());
-        List<Address> addresses;
+        String adminarea = AddressTranslation.convertAddr(address.getAdminArea());
+        Log.d("namjinha", "adminarea = " + adminarea);
+
         try
         {
-            addresses = geocoder.getFromLocation(
-                    latitude,
-                    longitude,
-                    7);
+            PreferenceManager.setStringPreference(this, DefineValue.PREFERENCE_DO_NAME, adminarea);
+            PreferenceManager.setStringPreference(this, DefineValue.PREFERENCE_SI_NAME, add[2]);
+            PreferenceManager.setStringPreference(this, DefineValue.PREFERENCE_ADMIN_AREA, URLEncoder.encode(adminarea, "utf-8"));
+            PreferenceManager.setStringPreference(this, DefineValue.PREFERENCE_ADDRESS_LINE, addressline);
         }
         catch (Exception e)
         {
-            return null;
+            e.printStackTrace();
         }
 
-        if (addresses == null || addresses.size() == 0)
-        {
-            return null;
-        }
+        TextView addresstxt = (TextView) findViewById(R.id.addresstxt);
+        addresstxt.setText(addressline);
 
-        Address address = addresses.get(0);
-        return address.getAddressLine(0);
+        TextView timetxt = (TextView) findViewById(R.id.timetxt);
+        timetxt.setText(getDisplayTime(System.currentTimeMillis()));
     }
 
-    private  boolean isLocationPermissins()
+    private String getDisplayTime(long timeValue)
     {
-        int hasFineLocationPermission = ContextCompat.checkSelfPermission(MainActivity.this,
-                Manifest.permission.ACCESS_FINE_LOCATION);
-        int hasCoarseLocationPermission = ContextCompat.checkSelfPermission(MainActivity.this,
-                Manifest.permission.ACCESS_COARSE_LOCATION);
-
-        if (hasFineLocationPermission == PackageManager.PERMISSION_GRANTED &&
-                hasCoarseLocationPermission == PackageManager.PERMISSION_GRANTED)
-        {
-            return true;
-        }
-        else
-        {
-            return false;
-        }
+        @SuppressLint("SimpleDateFormat")
+        SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd hh:mm a");
+        return simpleDateFormat.format(timeValue);
     }
 
-    private void checkRunTimePermission()
+    private void getAirKoreaData()
     {
-        int hasFineLocationPermission = ContextCompat.checkSelfPermission(MainActivity.this,
-                Manifest.permission.ACCESS_FINE_LOCATION);
-        int hasCoarseLocationPermission = ContextCompat.checkSelfPermission(MainActivity.this,
-                Manifest.permission.ACCESS_COARSE_LOCATION);
+        String doname = PreferenceManager.getStringPreference(this, DefineValue.PREFERENCE_DO_NAME, null);
+        String siname = PreferenceManager.getStringPreference(this, DefineValue.PREFERENCE_SI_NAME, null);
+        Log.d("namjinha", "do name = " + doname);
+        Log.d("namjinha", "si name = " + siname);
 
-
-        if (hasFineLocationPermission == PackageManager.PERMISSION_GRANTED &&
-                hasCoarseLocationPermission == PackageManager.PERMISSION_GRANTED)
+        final AnalyticsHelper analyticsHelper = new AnalyticsHelper();
+        analyticsHelper.initFirebaseAnalytics(this);
+        FireStoreHelper fireStoreHelper = new FireStoreHelper(this);
+        fireStoreHelper.setFireStoreCompleteListener(new OnFireStoreCompleteListener()
         {
-            ;
-        }
-        else
-        {
-            if (ActivityCompat.shouldShowRequestPermissionRationale(MainActivity.this, REQUIRED_PERMISSIONS[0])) {
-                Toast.makeText(MainActivity.this, "이 앱을 실행하려면 위치 접근 권한이 필요합니다.", Toast.LENGTH_LONG).show();
-                ActivityCompat.requestPermissions(MainActivity.this, REQUIRED_PERMISSIONS,
-                        REQ_LOCATION_PERMISSIONS);
-            }
-            else
+            @Override
+            public void onComplete(int result, boolean state)
             {
-                ActivityCompat.requestPermissions(MainActivity.this, REQUIRED_PERMISSIONS,
-                        REQ_LOCATION_PERMISSIONS);
+                if(!state)
+                {
+                    AirSidoDataAsynTask getDataAsynTask = new AirSidoDataAsynTask(MainActivity.this, MainActivity.this);
+                    getDataAsynTask.execute();
+
+                    //AirKorea 요청 정보 수집
+                    analyticsHelper.sendLogEvent(DefineValue.FA_EVENT_AIRKOREA_QUERY, null, null);
+                }
+                else
+                {
+                    updateMainView();
+
+                    //Firestore 요청 정보 수집
+                    analyticsHelper.sendLogEvent(DefineValue.FA_EVENT_FIRESTORE_QUERY, null, null);
+                }
             }
-        }
+        });
+        fireStoreHelper.getLatestDataData(doname, siname);
     }
 
-    private boolean checkLocationServicesStatus()
+    private void updateMainView()
     {
-        LocationManager locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
+        String fineDustValue = PreferenceManager.getStringPreference(this, DefineValue.PREFERENCE_FINE_DUST_VALUE, null);
+        String ultrafineDustValue = PreferenceManager.getStringPreference(this, DefineValue.PREFERENCE_ULTRAFINE_DUST_VALUE, null);
+        if(null == fineDustValue || null == ultrafineDustValue)
+        {
+            return;
+        }
 
-        return locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
-                || locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
+        int fineDustValueInt = Integer.parseInt(fineDustValue);
+        int ultralfineDustValueInt = Integer.parseInt(ultrafineDustValue);
+        int state = AirKoreaHelper.currentState(fineDustValueInt, ultralfineDustValueInt);
+
+        UpdateMainView updateMainView = new UpdateMainView(MainActivity.this);
+        updateMainView.initView();
+        updateMainView.updateBottomView(fineDustValue, ultrafineDustValue);
+        updateMainView.updateView(state);
     }
 }
